@@ -18,6 +18,10 @@ infix <+>;
 fun foldr1 f [x] = x
   | foldr1 f (x :: xs) = f (x, (foldr1 f xs));
 
+fun head s = String.sub (s, 0)
+fun tail s = String.extract (s, 1, NONE)
+fun cons c s = String.str c ^ s
+
 (*---------------------------------------------------------------------------*)
 (* TYPES                                                                     *)
 (*---------------------------------------------------------------------------*)
@@ -55,9 +59,6 @@ fun pp_constructor (name : string) =
 			       , (#"7", "Seven")
 			       , (#"8", "Eight")
 			       , (#"9", "Nine") ]
-      fun head s = String.sub (s, 0)
-      fun tail s = String.extract (s, 1, NONE)
-      fun cons c s = String.str c ^ s
       fun alphanum_ident () =
 	    cons (Char.toUpper (head name))
 		 (tail name)
@@ -235,19 +236,22 @@ end;
 val pp_variable =
   let
       val varid = fst o dest_var
-      fun fix_reserved s = if is_reserved s
-			   then s ^ "_"
+      fun fix_reserved s = if s = "_"
+			   then "underscore"
+			   else if is_reserved s
+			   then s ^ "'"
 			   else s
-      fun fix_first_char s =
-	let val c = String.sub (s, 0)
-	    val cs = String.extract (s, 1, NONE)
+      val fix_camel_case =
+	let fun is_sep c = c = #"-" orelse c = #"_"
+	    fun capitalize [] = []
+	      | capitalize (c::cs) = Char.toUpper c :: (map Char.toLower cs)
 	in
-	    if Char.isUpper c
-	    then str (Char.toLower c) ^ cs
-	    else s
+	    concat o map (implode o capitalize o explode) o String.tokens is_sep
 	end
+      fun fix_first_char s =
+	cons (Char.toLower (head s)) (tail s)
   in
-      text o fix_reserved o fix_first_char o varid
+      text o fix_first_char o fix_camel_case o fix_reserved o varid
   end;
 
 (* Apparently values of type ``:num`` are *arbitrary precision*
