@@ -456,55 +456,5 @@ and pp_lhs (t : term) =
       else if is_comb t then pp_comb t
       else raise ERR "pp_lhs" ("Term with unknown syntax: " ^ Parse.term_to_string t)
   end
-(*
-fun pp_datatype ppstrm (tyvars,decls) =
-  let open Portable ParseDatatype
-      val {add_break,add_newline,
-	   add_string,begin_block,end_block,...} = with_ppstream ppstrm
-      fun pp_tyvars [] = ()
-       | pp_tyvars [v] = (add_string v; add_break(1,0))
-       | pp_tyvars vlist =
-          (begin_block CONSISTENT 0;
-           pr_list (add_string o pp_type_variable)
-		   (fn () => add_break(1,0))
-		   (fn ()=>())
-		   vlist;
-           end_block())
-      fun pp_clause r clause =
-       (if !r then (add_string "= "; r:=false) else add_string "| ";
-        case clause
-         of (con,[]) => add_string (fix_cons con)
-          | (con,args) =>
-              (begin_block INCONSISTENT 0;
-                 begin_block CONSISTENT 0;
-                   add_string (fix_cons con);
-                   add_string " of ";
-                 end_block();
-               pp_tyl (map ParseDatatype.pretypeToType args);
-               end_block()))
-      fun pp_decl (tyvars,r) (name,Constructors clauselist) =
-        (begin_block CONSISTENT 5;
-	 begin_block CONSISTENT 0;
-	 add_string "data";
-         add_break(1,0);
-	 add_string pp_type_constructor name;
-	 add_break(1,0);
-	 pp_tyvars tyvars;
-         end_block();
-         add_break(1,0);
-         begin_block CONSISTENT 0;
-         pr_list (pp_clause (ref true))
-                 (fn () => ())
-                 (fn () => add_break(1,0)) clauselist;
-         end_block(); end_block())
-  in
-      begin_block CONSISTENT 0
-    ; pr_list (pp_decl (tyvars,ref true))
-              add_newline
-              add_newline
-              decls
-    ; end_block()
-  end;
 
-*)
 end;
