@@ -15,6 +15,8 @@ infix $$;
 infix cat;
 infix <+>;
 
+fun foldr1 f [x] = x
+  | foldr1 f (x :: xs) = f (x, (foldr1 f xs));
 
 (*---------------------------------------------------------------------------*)
 (* TYPES                                                                     *)
@@ -67,9 +69,9 @@ fun pp_constructor (name : string) =
 	    String.concat symNames
 	end
   in
-      if Char.isAlpha (head name)
-      then alphanum_ident ()
-      else symbolic_ident ()
+      text (if Char.isAlpha (head name)
+	    then alphanum_ident ()
+	    else symbolic_ident ())
   end;
 
 (* Translate the name of a type variable from HOL to Haskell
@@ -79,7 +81,7 @@ fun pp_type_variable (name : string) =
   let
       val (#"'"::c::cs) = String.explode name
   in
-      String.implode ((Char.toLower c) :: cs)
+      text (String.implode ((Char.toLower c) :: cs))
   end;
 
 fun pp_type_fun (f : hol_type) =
@@ -87,26 +89,27 @@ fun pp_type_fun (f : hol_type) =
       val (domain, range) = dom_rng f
   in
       pp_type_arg domain
-      ^ " "
-      ^ "->"
-      ^ " "
-      ^ (if is_vartype range
-	 then pp_type_variable (dest_vartype range)
-	 else "(" ^ pp_type_arg range ^ ")")
+      <+>
+      text "->"
+      <+>
+      (if is_vartype range
+       then pp_type_variable (dest_vartype range)
+       else text "(" <> pp_type_arg range <> text ")")
   end
 and pp_type_arg (arg : hol_type) =
     if is_type arg andalso fst (dest_type arg) = "fun"
-    then "(" ^ pp_type_fun arg ^ ")"
+    then text "(" <> pp_type_fun arg <> text ")"
     else pp_type_variable (dest_vartype arg);
 
-(* pp_type_args = fn : hol_type list -> string *)
-val pp_type_args = String.concatWith " " o map pp_type_arg
+fun pp_type_args (ts : hol_type list) =
+  case map pp_type_arg ts of
+      [] => text ""
+    | xs => text " " <> foldr1 (op <+>) xs;
 
 fun pp_type (t : hol_type) =
   let val (name, args) = dest_type t in
       pp_constructor name
-      ^ " "
-      ^ pp_type_args args
+      <> pp_type_args args
   end;
 
 fun pp_value_arg (t : hol_type) =
@@ -119,12 +122,15 @@ fun pp_value_arg (t : hol_type) =
 	   in
 	       if arity t = 0
 	       then pp_constructor name
-	       else "(" ^ pp_type t ^ ")"
+	       else text "(" <> pp_type t <> text ")"
 	   end)
       else pp_type_arg t
   end;
 
-val pp_value_args = String.concatWith " " o map pp_value_arg
+fun pp_value_args (ts : hol_type list) =
+  case map pp_value_arg ts of
+      [] => text ""
+   |  xs => text " " <> foldr1 (op <+>) xs;
 
 local
     fun is_funtype t = is_type t andalso (fst o dest_type) t = "fun";
@@ -143,13 +149,16 @@ fun pp_value_const (t : term) =
       val args = get_args term_type
   in
       pp_constructor term_name
-      ^ " "
-      ^ pp_value_args args
+      <> pp_value_args args
   end
 end;
 
-(* pp_value_consts = fn : term list -> string *)
-val pp_value_consts = String.concatWith " | " o map pp_value_const
+fun pp_value_consts (ts : term list) =
+  let fun f (d1, d2) = d1 <+> text "|" <+> d2 in
+      case map pp_value_const ts of
+	  [] => text ""
+	| xs => foldr1 f xs
+  end;
 
 fun guess_consts (t : hol_type) =
   let
@@ -171,14 +180,13 @@ fun value_consts (t : hol_type) =
    whose arguments are HOL type variables; otherwise the results are
    undefined. *)
 fun pp_type_decl (t : hol_type) =
-  "data"
-  ^ " "
-  ^ pp_type t
-  ^ let val consts = value_consts t in
+  text "data"
+  <+> pp_type t
+  <> let val consts = value_consts t in
 	if List.null consts
-	then ""
-	else " = " ^ pp_value_consts consts
-    end;
+	then text ""
+	else text " = " <> pp_value_consts consts
+     end;
 
 (*---------------------------------------------------------------------------*)
 (* TERMS                                                                     *)
@@ -192,9 +200,6 @@ fun partitions _ [] = []
   | partitions p (h::t) = let val (l1, l2) = partition (p h) t in
 			      (h :: l1) :: partitions p l2
 			  end;
-
-fun foldr1 f [x] = x
-  | foldr1 f (x :: xs) = f (x, (foldr1 f xs));
 
 local
   val a = mk_var("a",bool)
@@ -356,7 +361,7 @@ and pp_const (t : term) =
     then pp_abs andalso_tm
     else if same_const t boolSyntax.disjunction
          then pp_abs orelse_tm
-         else (text o pp_constructor o fst o dest_const) t
+         else (pp_constructor o fst o dest_const) t
     
 and pp_comb (t : term) =
     let
