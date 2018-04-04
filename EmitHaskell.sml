@@ -462,4 +462,34 @@ and pp_lhs (t : term) =
       else raise ERR "pp_lhs" ("Term with unknown syntax: " ^ Parse.term_to_string t)
   end
 
+(*---------------------------------------------------------------------------*)
+(* THEORIES                                                                  *)
+(*---------------------------------------------------------------------------*)
+
+fun create_type (name : string, arity : int) =
+  let
+      val lowercase = ["'a", "'b", "'c", "'d", "'e", "'f", "'g", "'h", "'i",
+		       "'j", "'k", "'l", "'m", "'n", "'o", "'p", "'q", "'r",
+		       "'s", "'t", "'u", "'v", "'w", "'x", "'y", "'z"]
+  in
+      mk_type (name, map mk_vartype (List.take (lowercase, arity)))
+  end;
+
+fun pp_theory (theory : string) =
+  let
+      val datatypes = map (pp_type_decl o create_type) (types theory)
+      val functions = map (pp_defns o concl o snd) (definitions theory)
+      infix $$$ fun d1 $$$ d2 = d1 $$ text "" $$ d2
+  in
+      text "module" <+> pp_constructor theory <+> text "where"
+	   $$$
+      (if null datatypes
+       then text ""
+       else foldr1 (op $$$) datatypes)
+	  $$$
+	  (if null functions
+	   then text ""
+	   else foldr1 (op $$$) functions)
+  end;
+
 end;
