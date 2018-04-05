@@ -335,13 +335,7 @@ and pp_fail (t : term) =
 and pp_unit () = text "()"
 
 and pp_case (t : term) =
-    let open patternMatchesSyntax
-	val (expr, clauses) = TypeBase.strip_case t
-	fun toRow (p, rhs) = mk_PMATCH_ROW (p, T, rhs)
-	val clauses' = listSyntax.lift_list (type_of PMATCH_ROW_tm) toRow clauses
-    in
-	pp_case_with_guard (mk_PMATCH expr clauses')
-    end
+    (pp_case_with_guard o patternMatchesLib.case2pmatch false) t
 
 and pp_case_with_guard (t : term) =
     let val (expr, clauses) = patternMatchesSyntax.dest_PMATCH t in
