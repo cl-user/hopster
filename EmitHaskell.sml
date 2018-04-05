@@ -395,14 +395,20 @@ and pp_term (t : term) : Doc =
   let
       val is_num_literal = Lib.can Literal.relaxed_dest_numeral
       val is_string_literal = Lib.can Literal.relaxed_dest_string_lit
-      fun is_infix t = case fixity t of
-			   SOME (Infix _) => true
-			 | _ => false
+      fun term_name t = case (dest_term o fst o strip_comb) t of
+			    VAR (name, _) => SOME name
+			  | CONST {Name=name, ...} => SOME name
+			  | _ => NONE
+      fun is_infix t = case term_name t of
+			   SOME s => (case fixity s of
+					  SOME (Infix _) => true
+					| _ => false)
+			|  NONE => false
       fun is_infix_app t = is_conj t
 			   orelse is_disj t
 			   orelse is_eq t
 			   orelse (is_comb t
-				   andalso (is_infix o fst o dest_const o fst o strip_comb) t)
+				   andalso is_infix t)
       val is_supported_pmatch = let open patternMatchesLib in
 				    is_ocaml_pmatch o analyse_pmatch false
 				end
