@@ -361,11 +361,17 @@ and pp_guard (t : term) =
     else text " | " <> pp_term t
 
 and pp_const (t : term) =
-    if same_const t boolSyntax.conjunction
-    then pp_abs andalso_tm
-    else if same_const t boolSyntax.disjunction
-         then pp_abs orelse_tm
-         else (pp_constructor o fst o dest_const) t
+    let
+	fun pp_t t =  if TypeBase.is_constructor t
+		      then (pp_constructor o fst o dest_const) t
+		      else (pp_variable o mk_var o dest_const) t
+    in
+	if same_const t boolSyntax.conjunction
+	then pp_abs andalso_tm
+	else (if same_const t boolSyntax.disjunction
+              then pp_abs orelse_tm
+              else pp_t t)
+    end
     
 and pp_comb (t : term) =
     let
