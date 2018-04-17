@@ -193,6 +193,45 @@ fun pp_type_decl (t : hol_type) =
 (* TERMS                                                                     *)
 (*---------------------------------------------------------------------------*)
 
+datatype side = Left | Right
+
+type context = (int * associativity * side) option
+
+(* A term with extra information from its context necessary to            *)
+(* pretty-print it (specifically to determine if it requires parenthesis) *)
+type terminfo = term * context;
+
+type emitter = terminfo -> Doc;
+
+fun return doc = fn (_ : terminfo) => doc;
+
+val fail = fn (_ : terminfo) => Empty;
+
+(* fun emit (e : emitter) *)
+(* 	 (t : terminfo) = *)
+(*   e t; *)
+
+(* fun sat (p : terminfo -> bool) = *)
+(*   fn (t : terminfo) => *)
+(*      if p t then pp_terminfo else fail; *)
+
+fun choose (p : context -> bool)
+	   (e : emitter)
+	   (e' : emitter) : emitter =
+  fn (t, cxt) =>
+     if p cxt then e (t, cxt) else e' (t, cxt);
+
+(* infix +++ *)
+(* fun (e : emitter) +++ (e' : emitter) = *)
+(*   fn (t : terminfo) => *)
+(*      case emit e t of *)
+(* 	 Empty => emit e' t *)
+(*        | doc => doc; *)
+
+fun parens (e : emitter) =
+  fn (t : terminfo) =>
+     text "(" <> e t <> text ")";
+
 fun same_fn eq1 eq2 = let val f = fst o strip_comb o lhs in
 			  same_const (f eq1) (f eq2)
 		      end;
@@ -233,7 +272,7 @@ end;
  * Returns a Doc representing a variable identifier in Haskell
  * syntax 
  *)
-val pp_variable =
+val pp_variable : emitter =
   let
       val varid = fst o dest_var
       fun fix_reserved s = if s = "_"
@@ -251,184 +290,261 @@ val pp_variable =
       fun fix_first_char s =
 	cons (Char.toLower (head s)) (tail s)
   in
-      text o fix_first_char o fix_camel_case o fix_reserved o varid
+      text o fix_first_char o fix_camel_case o fix_reserved o varid o fst
   end;
 
 (* Apparently values of type ``:num`` are *arbitrary precision*
 natural numbers. A Haskell value of type Numeric.Natural may be needed
 here. *)
-val pp_number =
-    text o Arbnum.toString o Literal.relaxed_dest_numeral
+val pp_number : emitter =
+    text o Arbnum.toString o Literal.relaxed_dest_numeral o fst;
 
-val pp_string =
-    text o quote o Literal.relaxed_dest_string_lit
+val pp_string : emitter =
+    text o quote o Literal.relaxed_dest_string_lit o fst;
 
-fun pp_conditional (t : term) =
+val pp_arb : emitter = return (text "undefined");
+
+val pp_unit : emitter  = return (text "()");
+
+fun pp_conditional (t, _) =
   let val (test_term, then_term, else_term) = dest_cond t in
-      text "if" <+> pp_term test_term
-	   $$ (text "then" <+> pp_term then_term)
-	   $$ (text "else" <+> pp_term else_term)
+      text "if" <+> pp_terminfo (test_term, NONE)
+	   $$ (text "then" <+> pp_terminfo (then_term, NONE))
+	   $$ (text "else" <+> pp_terminfo (else_term, NONE))
   end
 
-and pp_arb () = text "undefined"
+and parenthesize_conditional (e : emitter) =
+    let fun needs_parens NONE = false
+	  | needs_parens _ = true
+    in
+	choose needs_parens (parens e) e
+    end
 
-and pp_list (t : term) =
-  let
-      val elems = map pp_term (fst (listSyntax.dest_list t))
-      infix <++> fun x <++> y = x <> text "," <+> y
-  in
-      text "["
-      <> (if null elems
-	  then text ""
-	  else foldr1 (op <++>) elems)
-      <> text "]"
-  end
+and pp_list (t, _) =
+    let
+	val elems = map (fn t' => (t', NONE)) (fst (listSyntax.dest_list t))
+	val docs = map pp_terminfo elems
+	infix <++> fun x <++> y = x <> text "," <+> y
+    in
+	text "["
+	<> foldr (op <++>) (text "") docs
+	<> text "]"
+    end
 
-and pp_cons (t : term) =
-    let	val (h, t) = listSyntax.dest_cons t in
-	pp_term h <+> text ":" <+> pp_term t
-  end
+and pp_cons (t, _) =
+    let
+	val SOME (Infix (a, p)) = fixity "::"
+	val (l, r) = listSyntax.dest_cons t
+    in
+	pp_terminfo (l, SOME (p, a, Left))
+		    <+> text ":"
+		    <+> pp_terminfo (r, SOME (p, a, Right))
+    end
 
-and pp_binop (t : term) =
-  let
-      val (c, [t1, t2]) = strip_comb t
-      fun cmp (t, t') =
-	let
-	    val {Name=name, Thy=theory, ...} = dest_thy_const t
-	    val {Name=name', Thy=theory', ...} = dest_thy_const t'
-	in
-      	    pair_compare(String.compare,String.compare) ((name,theory),(name',theory'))
-	end
-      val binops = Redblackmap.fromList cmp [(boolSyntax.equality, "=="),
-					     (boolSyntax.conjunction, "&&"),
-					     (boolSyntax.disjunction, "||")]
-      val operator = case Redblackmap.peek (binops, c) of
-			 SOME x => x
-		       | NONE => #Name (dest_thy_const c)
-  in
-      pp_term t1 <+> text operator <+> pp_term t2
-  end
+and parenthesize_cons (e : emitter) =
+    let
+	val SOME (Infix (assoc, prec)) = fixity "::"
+	fun needs_parens (SOME (p, a, s)) = p > prec orelse (p = prec andalso s = Left)
+	  | needs_parens _ = false
 
-and pp_pair (t : term) =
-  let val (t1, t2) = pairSyntax.dest_pair t in
-      text "(" <> pp_term t1 <> text "," <+> pp_term t2 <> text ")"
-  end
+    in
+	choose needs_parens (parens e) e
+    end
 
-and pp_lets (t : term) =
+and pp_binop (t, _) =
+    let
+	val (c, [t1, t2]) = strip_comb t
+	val (a, p) = case (fixity o #Name o dest_thy_const) c of
+			 SOME (Infix x) => x
+		       | _ => (NONASSOC, 0)
+	fun cmp (t, t') =
+	  let
+	      val {Name=name, Thy=theory, ...} = dest_thy_const t
+	      val {Name=name', Thy=theory', ...} = dest_thy_const t'
+	  in
+      	      pair_compare(String.compare,String.compare) ((name,theory),(name',theory'))
+	  end
+	val binops = Redblackmap.fromList cmp [(boolSyntax.equality, "=="),
+					       (boolSyntax.conjunction, "&&"),
+					       (boolSyntax.disjunction, "||")]
+	val operator = case Redblackmap.peek (binops, c) of
+			   SOME x => x
+			 | NONE => #Name (dest_thy_const c)
+    in
+	pp_terminfo (t1, SOME (p, a, Left))
+		     <+> text operator
+		     <+> pp_terminfo (t2, SOME (p, a, Right))
+    end
+
+and parenthesize_binop (e : emitter) =
+    fn (t, cxt) =>
+       let
+	   val (_, prec) = case (fixity o #Name o dest_thy_const o fst o strip_comb) t of
+			       SOME (Infix x) => x
+			     | _ => (NONASSOC, 0)
+	   fun needs_parens (SOME (p, a, s)) = p > prec orelse
+					       (p = prec andalso ((a = LEFT andalso s = Right) orelse
+								  (a = RIGHT andalso s = Left)))
+	     | needs_parens _ = false
+       in
+	   (choose needs_parens (parens e) e) (t, cxt)
+       end
+
+and pp_pair (t, _) =
+    let val (t1, t2) = pairSyntax.dest_pair t in
+	text "(" <> pp_terminfo (t1, NONE) <>
+	text "," <+> pp_terminfo (t2, NONE) <> text ")"
+    end
+
+and pp_lets (t, _) =
     let
 	val (defs, body) = pairSyntax.strip_anylet t
 	val defs' = map mk_eq (flatten defs)
     in
-      vertical (text "let") 4 (map pp_defns defs') $$ text "in" $$ (nest 4 (pp_term body))
-  end
+	vertical (text "let") 4 (map pp_defns defs') $$
+		 text "in" $$
+		 nest 4 (pp_terminfo (body, NONE))
+    end
 
-and pp_abs (t : term) =
-  let val (p, body) = pairSyntax.dest_pabs t in
-      text "(" <> text "\\" <> pp_lhs p <+> text "->" <+> pp_term body <> text ")"
-  end
+and parenthesize_lets (e : emitter) = parenthesize_conditional e
 
-and pp_fail (t : term) =
+and pp_abs (t, _) =
+    let val (p, body) = pairSyntax.dest_pabs t in
+	text "\\" <> pp_lhs (p, NONE) <+> text "->" <+> pp_terminfo (body, NONE)
+    end
+
+and parenthesize_abs (e : emitter) = parenthesize_conditional e
+
+and pp_fail (t, _) =
     let val (f, s, args) = combinSyntax.dest_fail t in
 	text "error" <+> text "\"" <> text s <> text "\""
     end
 
-and pp_unit () = text "()"
+and parenthesize_fail (e : emitter) = parenthesize_comb e
 
-and pp_case (t : term) =
-    (pp_case_with_guard o patternMatchesLib.case2pmatch false) t
 
-and pp_case_with_guard (t : term) =
+and pp_case (t, cxt) =
+    let val t' = patternMatchesLib.case2pmatch false t in
+	pp_case_with_guard (t', cxt)
+    end
+
+and pp_case_with_guard (t, _) =
     let val (expr, clauses) = patternMatchesSyntax.dest_PMATCH t in
-	vertical (text "case" <+> pp_term expr <+> text "of")
+	vertical (text "case" <+> pp_terminfo (expr, NONE) <+> text "of")
 		 4
-		 (map pp_case_clause clauses)
+		 (map (pp_case_clause o (fn c => (c, NONE))) clauses)
     end
 
-and pp_case_clause (t : term) =
+and parenthesize_case (e : emitter) = parenthesize_conditional e
+	
+and pp_case_clause (t, _) =
     let val (_, lhs, guard, rhs) = patternMatchesSyntax.dest_PMATCH_ROW_ABS t in
-	pp_lhs lhs <> pp_guard guard <+> text "->" <+> pp_term rhs
+	(pp_lhs : emitter) (lhs, NONE) <>
+	pp_guard (guard, NONE) <+> text "->" <+> pp_terminfo (rhs, NONE)
     end
 
-and pp_guard (t : term) =
+and pp_guard (t, _) =
     if (aconv t T)
     then text ""
-    else text " | " <> pp_term t
+    else text " | " <> pp_terminfo (t, NONE)
 
-and pp_const (t : term) =
+and pp_const (t, _) =
     let
 	fun pp_t t =  if TypeBase.is_constructor t
 		      then (pp_constructor o fst o dest_const) t
-		      else (pp_variable o mk_var o dest_const) t
+		      else (pp_variable o (fn x => (x, NONE)) o mk_var o dest_const) t
     in
 	if same_const t boolSyntax.conjunction
-	then pp_abs andalso_tm
+	then pp_abs (andalso_tm, NONE)
 	else (if same_const t boolSyntax.disjunction
-              then pp_abs orelse_tm
-              else pp_t t)
+	      then pp_abs (orelse_tm, NONE)
+	      else pp_t t)
     end
     
-and pp_comb (t : term) =
-    let
-	val (h, args) = strip_comb t
-	val (argtys, target) = strip_fun (generic_type_of h)
-    in
-	if length argtys < length args
-	then let val (app, rst) = split_after (length argtys) args in
-		 pp_term (list_mk_comb (h, app)) <+> (foldr1 (op <+>) (map pp_term rst))
-	     end
-	else pp_open_comb t
-    end
+(* and pp_comb (t, _) = *)
+(*     let *)
+(* 	val (h, args) = strip_comb t *)
+(* 	val (argtys, target) = strip_fun (generic_type_of h) *)
+(*     in *)
+(* 	if length argtys < length args *)
+(* 	then let val (app, rst) = split_after (length argtys) args in *)
+(* 		 pp_term (list_mk_comb (h, app)) <+> (foldr1 (op <+>) (map pp_term rst)) *)
+(* 	     end *)
+(* 	else pp_open_comb t *)
+(*     end *)
 
-and pp_open_comb (t : term) =
-    let	val (f, args) = strip_comb t in
-	foldr1 (op <+>) (map pp_term (f :: args))
+(* and pp_open_comb (t, _) = *)
+(*     let	val (f, args) = strip_comb t in *)
+(* 	foldr1 (op <+>) (map pp_term (f :: args)) *)
+(*     end *)
+
+and pp_comb (t, _) =
+    let
+	val (f, args) = strip_comb t
+	fun context side = SOME (2000, LEFT, side)
+    in
+	pp_terminfo (f, context Left) <+>
+	foldr1 (op <+>) (map (pp_terminfo o (fn x => (x, context Right))) args)
     end
-	
+					 
+
+and parenthesize_comb (e : emitter) =
+    let
+	val (prec, assoc) = (2000, LEFT)
+	fun needs_parens (SOME (p, a, s)) = p > prec orelse
+					    (p = prec andalso
+					     ((a = RIGHT andalso s = Left) orelse
+					      (a = LEFT  andalso s = Right)))
+	  | needs_parens _ = false
+    in
+	choose needs_parens (parens e) e
+    end
+	   
 (* Returns a Doc representing a HOL term as a Haskell expression *)
-and pp_term (t : term) : Doc =
-  let
-      val is_num_literal = Lib.can Literal.relaxed_dest_numeral
-      val is_string_literal = Lib.can Literal.relaxed_dest_string_lit
-      fun term_name t = case (dest_term o fst o strip_comb) t of
-			    VAR (name, _) => SOME name
-			  | CONST {Name=name, ...} => SOME name
-			  | _ => NONE
-      fun is_infix t = case term_name t of
-			   SOME s => (case fixity s of
-					  SOME (Infix _) => true
-					| _ => false)
-			|  NONE => false
-      fun is_infix_app t = is_conj t
-			   orelse is_disj t
-			   orelse is_eq t
-			   orelse (is_comb t
-				   andalso is_infix t)
-      val is_supported_pmatch = let open patternMatchesLib in
-				    is_ocaml_pmatch o analyse_pmatch false
-				end
-  in
-      if is_var t then pp_variable t
-      else if is_cond t then pp_conditional t
-      else if is_arb t then pp_arb ()
-      else if is_num_literal t then pp_number t
-      else if is_string_literal t then pp_string t
-      else if listSyntax.is_list t then pp_list t
-      else if listSyntax.is_cons t then pp_cons t (* unreachable *)
-						(* else if listSyntax.is_mem t then  *)
-      else if is_infix_app t then pp_binop t
-      else if pairSyntax.is_pair t then pp_pair t
-      else if boolSyntax.is_let t then pp_lets t
-      else if pairSyntax.is_pabs t then pp_abs t
-      else if combinSyntax.is_fail t then pp_fail t
-      else if oneSyntax.is_one t then pp_unit ()
-      (* else if TypeBase.is_record tm then pp_record i (TypeBase.dest_record tm) *)
-      else if is_supported_pmatch t then pp_case_with_guard t
-      else if TypeBase.is_case t then pp_case t
-					      (* else if is_the_value t then pp_itself t *)
-      else if is_const t then pp_const t
-      else if is_comb t then pp_comb t
-      else raise ERR "pp_term" ("Term with unknown syntax: " ^ Parse.term_to_string t)
-  end
+and pp_terminfo (t, cxt) =
+       let
+	   val is_num_literal = Lib.can Literal.relaxed_dest_numeral
+	   val is_string_literal = Lib.can Literal.relaxed_dest_string_lit
+	   fun term_name t = case (dest_term o fst o strip_comb) t of
+				 VAR (name, _) => SOME name
+			       | CONST {Name=name, ...} => SOME name
+			       | _ => NONE
+	   fun is_infix t = case term_name t of
+				SOME s => (case fixity s of
+					       SOME (Infix _) => true
+					     | _ => false)
+			     |  NONE => false
+	   fun is_infix_app t = is_conj t
+				orelse is_disj t
+				orelse is_eq t
+				orelse (is_comb t
+					andalso is_infix t)
+	   val is_supported_pmatch = let open patternMatchesLib in
+					 is_ocaml_pmatch o analyse_pmatch false
+				     end
+       in
+	   if is_var t then pp_variable (t, cxt)
+	   else if is_cond t then parenthesize_conditional pp_conditional (t, cxt)
+	   else if is_arb t then pp_arb (t, cxt)
+	   else if is_num_literal t then pp_number (t, cxt)
+	   else if is_string_literal t then pp_string (t, cxt)
+	   else if listSyntax.is_list t then pp_list (t, cxt)
+	   else if listSyntax.is_cons t then parenthesize_conditional pp_cons (t, cxt)
+						     (* else if listSyntax.is_mem t then  *)
+	   else if is_infix_app t then parenthesize_binop pp_binop (t, cxt)
+	   else if pairSyntax.is_pair t then pp_pair (t, cxt)
+	   else if boolSyntax.is_let t then parenthesize_lets pp_lets (t, cxt)
+	   else if pairSyntax.is_pabs t then parenthesize_abs pp_abs (t, cxt)
+	   else if combinSyntax.is_fail t then parenthesize_fail pp_fail (t, cxt)
+	   else if oneSyntax.is_one t then pp_unit (t, cxt)
+						   (* else if TypeBase.is_record tm then pp_record i (TypeBase.dest_record tm) *)
+	   else if is_supported_pmatch t then pp_case_with_guard (t, cxt)
+	   else if TypeBase.is_case t then pp_case (t, cxt)
+						   (* else if is_the_value t then pp_itself t *)
+	   else if is_const t then pp_const (t, cxt)
+	   else if is_comb t then parenthesize_comb pp_comb (t, cxt)
+	   else raise ERR "pp_term" ("Term with unknown syntax: " ^ Parse.term_to_string t)
+       end
 
 and pp_defns (t : term) =
     let
@@ -441,36 +557,36 @@ and pp_defns (t : term) =
     end
 
 and pp_defn_clauses (ts : term list) =
-    foldr1 (op $$) (map pp_defn_clause ts)
+    (foldr1 (op $$) o map pp_defn_clause) ts
 
 and pp_defn_clause (t : term) =
-    let	val (l, r) = dest_eq t in
-	pp_lhs l <+> text "=" <+> pp_term r
+    let val (l, r) = dest_eq t in
+	pp_lhs (l, NONE) <+> text "=" <+> pp_terminfo (r, NONE)
     end
 
-and pp_lhs (t : term) =
-  let
-      val is_num_literal = Lib.can Literal.relaxed_dest_numeral
-      val is_string_literal = Lib.can Literal.relaxed_dest_string_lit
-  in
-      if is_var t then pp_variable t
-      else if is_arb t then pp_arb ()
-      else if is_num_literal t then pp_number t
-      else if is_string_literal t then pp_string t
-      else if listSyntax.is_list t then pp_list t
-      else if listSyntax.is_cons t then pp_cons t (* unreachable *)
-						(* else if listSyntax.is_mem t then  *)
-      else if pairSyntax.is_pair t then pp_pair t
-      else if boolSyntax.is_let t then pp_lets t
-      else if pairSyntax.is_pabs t then pp_abs t
-      else if combinSyntax.is_fail t then pp_fail t
-      else if oneSyntax.is_one t then pp_unit ()
-      (* else if TypeBase.is_record tm then pp_record i (TypeBase.dest_record tm) *)
-					      (* else if is_the_value t then pp_itself t *)
-      else if is_const t then pp_const t
-      else if is_comb t then pp_comb t
-      else raise ERR "pp_lhs" ("Term with unknown syntax: " ^ Parse.term_to_string t)
-  end
+and pp_lhs (t, cxt) =
+    let
+	val is_num_literal = Lib.can Literal.relaxed_dest_numeral
+	val is_string_literal = Lib.can Literal.relaxed_dest_string_lit
+    in
+	if is_var t then pp_variable (t, cxt)
+	else if is_arb t then pp_arb (t, cxt)
+	else if is_num_literal t then pp_number (t, cxt)
+	else if is_string_literal t then pp_string (t, cxt)
+	else if listSyntax.is_list t then pp_list (t, cxt)
+	else if listSyntax.is_cons t then parenthesize_cons pp_cons (t, cxt)
+						       (* else if listSyntax.is_mem t then  *)
+	else if pairSyntax.is_pair t then pp_pair (t, cxt)
+	else if boolSyntax.is_let t then parenthesize_lets pp_lets (t, cxt)
+	else if pairSyntax.is_pabs t then parenthesize_abs pp_abs (t, cxt)
+	else if combinSyntax.is_fail t then parenthesize_fail pp_fail (t, cxt)
+	else if oneSyntax.is_one t then pp_unit (t, cxt)
+						(* else if TypeBase.is_record tm then pp_record i (TypeBase.dest_record tm) *)
+						(* else if is_the_value t then pp_itself t *)
+	else if is_const t then pp_const (t, cxt)
+	else if is_comb t then parenthesize_comb pp_comb (t, cxt)
+	else raise ERR "pp_lhs" ("Term with unknown syntax: " ^ Parse.term_to_string t)
+    end
 
 (*---------------------------------------------------------------------------*)
 (* THEORIES                                                                  *)
