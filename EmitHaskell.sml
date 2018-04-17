@@ -327,7 +327,9 @@ and pp_list (t, _) =
 	infix <++> fun x <++> y = x <> text "," <+> y
     in
 	text "["
-	<> foldr (op <++>) (text "") docs
+	<> (case docs of
+		[] => text ""
+	      | _ => foldr1 (op <++>) docs)
 	<> text "]"
     end
 
