@@ -7,7 +7,7 @@
 structure EmitHaskell (* :> EMITHASKELL *) =
 struct
 
-open HolKernel boolSyntax Abbrev;
+open HolKernel boolSyntax Abbrev term_grammar Parse;
 
 open HughesPP;
 infix <>;
@@ -165,7 +165,7 @@ fun guess_consts (t : hol_type) =
   let
       val {Thy = thy, Tyop = tyop, Args = args} = dest_thy_type t
       val cs = constants thy
-      val ds = definitions thy
+      val ds = DB.definitions thy
   in
       []
   end;
@@ -195,7 +195,7 @@ fun pp_type_decl (t : hol_type) =
 
 datatype side = Left | Right
 
-type context = (int * associativity * side) option
+type context = (int * HOLgrammars.associativity * side) option
 
 (* A term with extra information from its context necessary to            *)
 (* pretty-print it (specifically to determine if it requires parenthesis) *)
@@ -606,7 +606,7 @@ fun create_type (name : string, arity : int) =
 fun pp_theory (theory : string) =
   let
       val datatypes = map (pp_type_decl o create_type) (types theory)
-      val functions = map (pp_defns o concl o snd) (definitions theory)
+      val functions = map (pp_defns o concl o snd) (DB.definitions theory)
       infix $$$ fun d1 $$$ d2 = d1 $$ text "" $$ d2
   in
       text "module" <+> pp_constructor theory <+> text "where"
