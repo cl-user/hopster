@@ -27,7 +27,7 @@ fun cons c s = String.str c ^ s
 (*---------------------------------------------------------------------------*)
 
 (* Translate a HOL identifier to a Haskell constructor *)
-fun pp_constructor (name : string) =
+fun hs_constructor (name : string) =
   let
       val symbolicChars =
 	  Redblackmap.fromList Char.compare
@@ -70,10 +70,12 @@ fun pp_constructor (name : string) =
 	    String.concat symNames
 	end
   in
-      text (if Char.isAlpha (head name)
-	    then alphanum_ident ()
-	    else symbolic_ident ())
+      if Char.isAlpha (head name)
+      then alphanum_ident ()
+      else symbolic_ident ()
   end;
+
+val pp_constructor = text o hs_constructor;
 
 (* Translate the name of a type variable from HOL to Haskell
 syntax. It drops the apostrophe at the beginning of the name and makes
@@ -269,12 +271,11 @@ fun is_reserved s = Redblackset.member (keywords, s)
 end;
 
 (* 
- * Returns a Doc representing a variable identifier in Haskell
+ * Returns a string representing a variable identifier in Haskell
  * syntax 
  *)
-val pp_variable : emitter =
+val hs_variable =
   let
-      val varid = fst o dest_var
       fun fix_reserved s = if s = "_"
 			   then "underscore"
 			   else if is_reserved s
@@ -290,8 +291,13 @@ val pp_variable : emitter =
       fun fix_first_char s =
 	cons (Char.toLower (head s)) (tail s)
   in
-      text o fix_first_char o fix_camel_case o fix_reserved o varid o fst
+      fix_first_char o fix_camel_case o fix_reserved
   end;
+
+val pp_variable : emitter =
+    let val varid = fst o dest_var in
+	text o hs_variable o varid o fst
+    end;
 
 (* Apparently values of type ``:num`` are *arbitrary precision*
 natural numbers. A Haskell value of type Numeric.Natural may be needed
