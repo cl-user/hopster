@@ -42,6 +42,15 @@ signature PARSER = sig
     val alphanum : char t;
     val char : char -> char t;
     val string : string -> string t;
+    val ident : string t;
+    val nat : int t;
+    val space : unit t
+    val int : int t;
+    val token : 'a t -> 'a t;
+    val identifier : string t;
+    val natural : int t;
+    val integer : int t;
+    val symbol : string -> string t
 end;
 
 structure Parser : PARSER =
@@ -109,5 +118,28 @@ fun many p = (p >>= (fn x => many p >>= (fn xs => return (x :: xs)))) <|> pure n
 
 fun some x = let fun g x xs = x :: xs in
 		 pure g <*> x <*> many x
-	     end
+	     end;
+
+val ident = lower >>= (fn x =>
+	    many alphanum >>= (fn xs =>
+	    return (implode (x :: xs))));
+
+val nat = some digit >>= (fn xs => case Int.fromString (implode xs) of
+				       SOME n => return n
+				     | NONE => empty);
+
+val space = many (sat Char.isSpace) >>= (fn _ => return ());
+
+val int = (char #"-" >>= (fn _ => nat >>= (fn n => return (~ n)))) <|> nat;
+
+fun token p = space >>= (fn _ => p >>= (fn v => space >>= (fn _ => return v)));
+
+val identifier = token ident;
+
+val natural = token nat;
+
+val integer = token int;
+
+fun symbol xs = token (string xs)
+
 end;
