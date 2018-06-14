@@ -39,6 +39,9 @@ structure StringDict = MakeDict (structure Key = OrderedString;
 signature DICTIONARY = sig
     type dict;
 
+    val hs_constructor : string -> string;
+    val hs_variable : string -> string;
+
     val types : hol_type -> dict;
     val terms : term -> dict
 end;
@@ -48,12 +51,96 @@ struct
 
 type dict = (string, string) StringDict.dict;
 
+fun head s = String.sub (s, 0)
+fun tail s = String.extract (s, 1, NONE)
+fun cons c s = String.str c ^ s
+
+fun hs_constructor (name : string) =
+  let
+      val symbolicChars =
+	  Redblackmap.fromList Char.compare
+			       [ (#"#", "NumberSign")
+			       , (#"?", "QuestionMark")
+			       , (#"+", "PlusSign")
+			       , (#"*", "Asterisk")
+			       , (#"/", "Solidus")
+			       , (#"\\", "ReverseSolidus")
+			       , (#"=", "EqualsSign")
+			       , (#"<", "LessThanSign")
+			       , (#">", "GreaterThanSign")
+			       , (#"&", "Ampersand")
+			       , (#"%", "PercentSign")
+			       , (#"@", "CommercialAt")
+			       , (#"!", "ExclamationMark")
+			       , (#":", "Colon")
+			       , (#"|", "VerticalLine")
+			       , (#"-", "HyphenMinus")
+			       , (#"^", "CircumflexAccent")
+			       , (#"'", "Apostrophe")
+			       , (#"0", "Zero")
+			       , (#"1", "One")
+			       , (#"2", "Two")
+			       , (#"3", "Three")
+			       , (#"4", "Four")
+			       , (#"5", "Five")
+			       , (#"6", "Six")
+			       , (#"7", "Seven")
+			       , (#"8", "Eight")
+			       , (#"9", "Nine") ]
+      fun alphanum_ident () =
+	    cons (Char.toUpper (head name))
+		 (tail name)
+      fun symbolic_ident () =
+	let
+	    val symNames = List.map ((curry Redblackmap.find) symbolicChars)
+				    (explode name)
+	in
+	    String.concat symNames
+	end
+  in
+      if Char.isAlpha (head name)
+      then alphanum_ident ()
+      else symbolic_ident ()
+  end;
+
+local
+    val keywords = Redblackset.addList
+			  (Redblackset.empty String.compare,
+			   ["case", "class", "data", "default"
+			    , "deriving", "do", "else", "foreign"
+			    , "if", "import", "in", "infix", "infixl"
+			    , "infixr", "instance", "let", "module"
+			    , "newtype", "of", "then", "type", "where", "_"])
+in
+fun is_reserved s = Redblackset.member (keywords, s)
+end;
+
+val hs_variable =
+  let
+      fun fix_reserved s = if s = "_"
+			   then "underscore"
+			   else if is_reserved s
+			   then s ^ "'"
+			   else s
+      val fix_camel_case =
+	let fun is_sep c = c = #"-" orelse c = #"_"
+	    fun capitalize [] = []
+	      | capitalize (c::cs) = Char.toUpper c :: (map Char.toLower cs)
+	in
+	    concat o map (implode o capitalize o explode) o String.tokens is_sep
+	end
+      fun fix_first_char s =
+	cons (Char.toLower (head s)) (tail s)
+  in
+      fix_first_char o fix_camel_case o fix_reserved
+  end;
+
 fun types' (t : hol_type, d : dict) =
 	if is_vartype t
 	then d
 	else let val (name, args) = dest_type t in
 		 foldr types'
- 		       (StringDict.insert (d, EmitHaskell.hs_constructor name, name))
+ 		       (StringDict.insert (d, hs_constructor name, name))
 		       (filter is_type args)
 	     end;
 
@@ -61,10 +148,10 @@ fun types (t : hol_type) = types' (t, StringDict.create);
 
 fun terms' (t : term, d : dict) =
     case dest_term t of
-	VAR (s, _)          => StringDict.insert (d, EmitHaskell.hs_variable s, s)
+	VAR (s, _)          => StringDict.insert (d, hs_variable s, s)
       | CONST {Name=s, ...} => StringDict.insert (d, (if TypeBase.is_constructor t
-						      then EmitHaskell.hs_constructor s
-						      else EmitHaskell.hs_variable s), s)
+						      then hs_constructor s
+						      else hs_variable s), s)
       | COMB (t1, t2) => StringDict.merge (terms t1,
 					   terms t2)
       | LAMB (t1, t2) => StringDict.merge (terms t1,
