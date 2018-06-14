@@ -62,7 +62,9 @@ fun types (t : hol_type) = types' (t, StringDict.create);
 fun terms' (t : term, d : dict) =
     case dest_term t of
 	VAR (s, _)          => StringDict.insert (d, EmitHaskell.hs_variable s, s)
-      | CONST {Name=s, ...} => StringDict.insert (d, EmitHaskell.hs_variable s, s)
+      | CONST {Name=s, ...} => StringDict.insert (d, (if TypeBase.is_constructor t
+						      then EmitHaskell.hs_constructor s
+						      else EmitHaskell.hs_variable s), s)
       | COMB (t1, t2) => StringDict.merge (terms t1,
 					   terms t2)
       | LAMB (t1, t2) => StringDict.merge (terms t1,
