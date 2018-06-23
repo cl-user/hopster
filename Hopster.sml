@@ -96,33 +96,33 @@ val parse_conjectures =
     map (fn conj => ([], string_to_term conj)) o conjectures o explode;
 
 (* Tactic to prove a single goal *)
-fun PROVE_TAC lemmas = TRY (TRY (Induct) \\ metis_tac lemmas);
+fun HARD_TAC lemmas = TRY (TRY (Induct) \\ metis_tac lemmas);
 
-fun prove_conjectures_aux ([], thms, [], _, _) = ([], thms)
-  | prove_conjectures_aux ([], thms, acc, _, false) = (acc, thms)
-  | prove_conjectures_aux ([], thms, acc, defns, true) =
+fun EASY_TAC lemmas = fs (map (fn x => Ntimes x 10) lemmas);
+
+fun prove_conjectures_aux (tactic, [], thms, [], _, _) = ([], thms)
+  | prove_conjectures_aux (tactic, [], thms, acc, _, false) = (rev acc, thms)
+  | prove_conjectures_aux (tactic, [], thms, acc, defns, true) =
     let val _ = print "Finished one loop, will do another...\n" in
-	prove_conjectures_aux (rev acc, thms, [], defns, false)
+	prove_conjectures_aux (tactic, rev acc, thms, [], defns, false)
     end
-  | prove_conjectures_aux (g::gs, thms, acc, defns, status) =
-    case PROVE_TAC (defns @ thms) g of
+  | prove_conjectures_aux (tactic, g::gs, thms, acc, defns, status) =
+    case tactic (defns @ thms) g of
 	([], f) => let val _ = print "Conjecture proven...\n" in
-		       prove_conjectures_aux (gs, f [] :: thms, acc, defns, true)
+		       prove_conjectures_aux (tactic, gs, f [] :: thms, acc, defns, true)
 		   end
       | _ => let val _ = print "Conjecture not proven...\n" in
-	       prove_conjectures_aux (gs, thms, g :: acc, defns, status)
+		 prove_conjectures_aux (tactic, gs, thms, g :: acc, defns, status)
 	     end;
 
 fun prove_conjectures (goals, defns) =
-    prove_conjectures_aux (goals,  (* goals left to be proven *)
-			   [],     (* lemmas proved thus far *)
-			   [],     (* goals unproved with the current set of
-				      lemmas *)
-			   defns,  (* definitions over which theory
-				      exploration was performed *)
-			   false); (* flag that indicates if at least one goal
-                                      has been proven with the current set of
-				      lemmas *)
+    let
+	val args = (EASY_TAC, goals, [], [], defns, false);
+	val (gs, ls) = prove_conjectures_aux args;
+	val args' = (HARD_TAC, gs, [], [], defns @ lemmas, false)
+    in
+	prove_conjectures_aux args'
+    end;
 
 (* Perform theory exploration on a set of datatypes and function definitions. *)
 (* `datatypes` is a list of HOL types.                                        *)
