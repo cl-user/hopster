@@ -12,6 +12,7 @@ functor MakeDict (structure Key : ORDER; type value) :
 	    		 (Key.t, value) dict;
 	    val merge  : (Key.t, value) dict * (Key.t, value) dict ->
 	    		 (Key.t, value) dict;
+	    val listItems : (Key.t, value) dict -> (Key.t * value) list
 	end
 =
 struct
@@ -21,6 +22,7 @@ type ('key, 'value) dict = (Key.t, value) Redblackmap.dict;
 val create = Redblackmap.mkDict Key.compare;
 val lookup = Redblackmap.peek;
 val insert = Redblackmap.insert;
+val listItems = Redblackmap.listItems;
 
 fun merge (d1, d2) =
     Redblackmap.insertList (d2, Redblackmap.listItems d1)
