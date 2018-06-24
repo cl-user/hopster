@@ -56,34 +56,36 @@ end;
 structure Parser : PARSER =
 struct
 
-type 'a t = string -> ('a * string) list;
+type 'a t = char list -> ('a * char list) list;
 
-fun parse p = p;
+fun parse p s = case (p o explode) s of
+		    nil => nil
+		  | [(v, out)] => [(v, implode out)];
 
-val item = fn inp => case explode inp of
-			 nil => nil
-		       | x::xs => [(x, implode xs)];
+val item =
+ fn nil => nil
+  | x::xs => [(x, xs)];
 
-fun fmap g p = fn inp => case parse p inp of
+fun fmap g p = fn inp => case p inp of
 			     nil => nil
 			   | [(v, out)] => [(g v, out)]
 
 fun pure v = fn inp => [(v, inp)];
 
-fun pg <*> px = fn inp => case parse pg inp of
+fun pg <*> px = fn inp => case pg inp of
 			      nil => nil
-			    | [(g, out)] => parse (fmap g px) out;
+			    | [(g, out)] => (fmap g px) out;
 
 val return = pure;
 
-fun p >>= f = fn inp => case parse p inp of
+fun p >>= f = fn inp => case p inp of
 			    nil => nil
-			  | [(v, out)] => parse (f v) out;
+			  | [(v, out)] => (f v) out;
 
 val empty = fn inp => nil;
 
-fun p <|> q = fn inp => case parse p inp of
-			    nil => parse q inp
+fun p <|> q = fn inp => case p inp of
+			    nil => q inp
 			  | [(v, out)] => [(v, out)];
 
 fun sat p = item >>= (fn x =>

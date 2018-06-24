@@ -74,26 +74,25 @@ fun write_haskell_module (modulename : string)
   in TextIO.closeOut file
   end;
 
-fun first_conjecture [] = ([], [])
-  | first_conjecture (x::y::cs) = if x = #"\n" andalso y = #"\n"
-				  then ([], cs)
-				  else (case first_conjecture (y :: cs) of
-					    (conj, others) => (x :: conj, others))
-  | first_conjecture (x::cs) = if x = #"\n"
-			       then first_conjecture cs
-			       else (case first_conjecture cs of
-					 (conj, others) => (x :: conj, others));
+local
+    open Parser;
+    infix >> fun ma >> mb = ma >>= (fn _ => mb)
+in
+fun conjecture () = (char #"\n" >> char #"\n" >> return nil) <|>
+	            (item >>= (fn x => conjecture () >>= (fn xs => return (x :: xs))));
 
-fun conjectures [] = []
-  | conjectures cs =
-    let val (conj, others) = first_conjecture cs in
-	implode conj :: conjectures others
-    end;
+val conjectures = many (token (conjecture ()))
+end;
 
 fun string_to_term s = Term [QUOTE s];
 
-val parse_conjectures =
-    map (fn conj => ([], string_to_term conj)) o conjectures o explode;
+fun parse_conjectures cs =
+    let val conjs = case Parser.parse conjectures cs of
+			[] => []
+		      | [(xs, out)] => map implode xs
+    in
+	map (fn conj => ([], string_to_term conj)) conjs
+    end;
 
 (* Tactic to prove a single goal *)
 fun HARD_TAC lemmas = TRY (TRY (Induct) \\ metis_tac lemmas);
