@@ -155,4 +155,61 @@ fun explore (datatypes : hol_type list)
       else raise ERR "explore" "Error while invoking tip tools"
   end;
 
+(**************)
+(* Proof mode *)
+(**************)
+
+structure Set = HOLset;
+
+fun is_constructor f =
+    let
+	fun constructors_of t = TypeBase.constructors_of t handle (HOL_ERR _) => [];
+	val cs = (constructors_of o snd o strip_fun o type_of) f
+    in
+	exists (fn g => f = g) cs
+    end;
+
+fun is_proper_fun t =
+    let val {Thy=thy, Ty=ty, ...} = dest_thy_const t in
+	(fst o dest_type) ty = "fun"
+	andalso	not (thy = "min")
+	andalso	not (thy = "bool")
+    end;
+
+val proper_funs = Set.foldr (fn (x, xs) => if is_const x andalso is_proper_fun x
+					      then Set.add (xs, x)
+					      else xs)
+			       (Set.empty Term.compare)
+		  o all_atoms;
+
+val functions =
+    let val cmp = pair_compare (String.compare,String.compare) in
+	Set.foldr (fn (x, xs) => Set.add (xs, x |> dest_thy_const
+						|> (fn {Name=name, Thy=thy, ...} => (thy, name))))
+		  (Set.empty cmp)
+	o Set.foldr (fn (x, xs) => if (not o is_constructor) x
+				   then Set.add (xs, x)
+				   else xs)
+		    (Set.empty Term.compare)
+	o proper_funs
+    end;
+
+val datatypes =
+    Set.foldr (fn (x, xs) => Set.add (xs, (snd o strip_fun o type_of) x))
+		   (Set.empty Type.compare)
+    o proper_funs;
+
+fun db_fetch (thy, name) = DB.fetch thy (name ^ !Defn.def_suffix);
+
+fun prove (goal : term list * term) =
+    let
+	val fs = (functions o snd) goal;
+	val fs' = Set.foldr (fn (x, xs) => Set.union (xs, (functions o concl o db_fetch) x)) fs fs;
+	val ts = (datatypes o snd) goal
+    in
+	Hopster.explore (Set.listItems ts)
+			(fs' |> Set.listItems
+			     |> map (fn (thy, name) => (thy, name ^ !Defn.def_suffix)))
+    end;
+
 end;
