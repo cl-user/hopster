@@ -118,7 +118,7 @@ fun prove_conjectures (goals, defns) =
     let
 	val args = (EASY_TAC, goals, [], [], defns, false);
 	val (gs, ls) = prove_conjectures_aux args;
-	val args' = (HARD_TAC, gs, [], [], defns @ lemmas, false)
+	val args' = (HARD_TAC, gs, [], [], defns @ ls, false)
     in
 	prove_conjectures_aux args'
     end;
@@ -207,9 +207,9 @@ fun prove (goal : term list * term) =
 	val fs' = Set.foldr (fn (x, xs) => Set.union (xs, (functions o concl o db_fetch) x)) fs fs;
 	val ts = (datatypes o snd) goal
     in
-	Hopster.explore (Set.listItems ts)
-			(fs' |> Set.listItems
-			     |> map (fn (thy, name) => (thy, name ^ !Defn.def_suffix)))
+	explore (Set.listItems ts)
+		(fs' |> Set.listItems
+		     |> map (fn (thy, name) => (thy, name ^ !Defn.def_suffix)))
     end;
 
 end;
