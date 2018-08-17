@@ -212,4 +212,37 @@ fun prove (goal : term list * term) =
 		     |> map (fn (thy, name) => (thy, name ^ !Defn.def_suffix)))
     end;
 
+fun try f arg =
+    SOME (f arg) handle (HOL_ERR _) => NONE;
+
+val name_of =
+    let
+	val fst_defn = hd o strip_conj;
+	val eqn = snd o strip_forall;
+	val name = fst o strip_comb
+    in
+	name o lhs o eqn o fst_defn o concl
+    end;
+
+fun defnames (thy : string) =
+    let
+	val defns = definitions thy;
+	val names = map (try (fn (dbname, defn) => (dbname, name_of defn))) defns
+    in
+	(map valOf o filter isSome) names
+    end;
+
+val TOP_FUNS_SIZE = 3;
+
+fun top_thy_funs (thy : string) =
+    let
+	(* val thy = (#Thy o dest_thy_type) t; *)
+	val (dbnames, names) = (unzip o defnames) thy;
+	val matches = map (length o DB.match [thy]) names;
+	val cmp = curry (op> o (snd ## snd));
+	val top = sort cmp (zip dbnames matches)
+    in
+	map fst (List.take (top, TOP_FUNS_SIZE))
+    end
+
 end;
