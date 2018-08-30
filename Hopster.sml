@@ -94,6 +94,8 @@ fun parse_conjectures cs =
 	map (fn conj => ([], string_to_term conj)) conjs
     end;
 
+val _ = metisTools.limit := {time = SOME 1.0, infs = NONE};
+
 (* Tactic to prove a single goal *)
 fun HARD_TAC lemmas = TRY (TRY (Induct) \\ metis_tac lemmas);
 
@@ -123,6 +125,28 @@ fun prove_conjectures (goals, defns) =
 	prove_conjectures_aux args'
     end;
 
+fun explore_aux (datatypes : hol_type list)
+		(defns : thm list) =
+    let
+      open OS.Process
+      val name = "Explore"
+      val contents = build_haskell_module name datatypes defns
+      val _ = write_haskell_module name contents
+      val cmd = "tip-ghc " ^ name ^ ".hs" ^ " | tip-spec | tip --hopster > tip-out.txt"
+    in
+      if isSuccess (system cmd)
+      then
+	  let
+	      val f = TextIO.openIn "tip-out.txt";
+	      val conjs = parse_conjectures (TextIO.inputAll f);
+	      val _ = TextIO.closeIn f;
+	      val (conjs', lemmas) = prove_conjectures (conjs, defns)
+	  in
+	      (conjs', lemmas)
+	  end
+      else raise ERR "explore" "Error while invoking tip tools"
+    end;
+
 (* Perform theory exploration on a set of datatypes and function definitions. *)
 (* `datatypes` is a list of HOL types.                                        *)
 (* `defns` is a list of pairs where the first component is the name of        *)
@@ -132,28 +156,8 @@ fun prove_conjectures (goals, defns) =
 (* EXAMPLE: Hopster.explore [] [("list","REVERSE_DEF"), ("list","APPEND")]    *)
 fun explore (datatypes : hol_type list)
 	    (defns : (string * string) list) =
-  let
-      open OS.Process
-      val _ = metisTools.limit := {time = SOME 1.0, infs = NONE}
-      val name = "Explore"
-      val ts = map (fn (theory, name) => DB.fetch theory name) defns
-      val contents = build_haskell_module name datatypes ts
-      val _ = write_haskell_module name contents
-      val cmd = "tip-ghc " ^ name ^ ".hs" ^ " | tip-spec | tip --hopster > tip-out.txt"
-  in
-      if isSuccess (system cmd)
-      then
-	  let
-	      val f = TextIO.openIn "tip-out.txt";
-	      val conjs = parse_conjectures (TextIO.inputAll f);
-	      val _ = TextIO.closeIn f;
-	      val (conjs', lemmas) = prove_conjectures (conjs, ts)
-	  in
-	      (conjs', lemmas)
-	      (* conjs *)
-	  end
-      else raise ERR "explore" "Error while invoking tip tools"
-  end;
+    explore_aux datatypes
+		(map (uncurry DB.fetch) defns);
 
 (**************)
 (* Proof mode *)
