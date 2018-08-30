@@ -3,12 +3,14 @@ struct
 
 open HolKernel
 
-open HughesPP
+open HughesPP DBData;
 
 infix <+>
 infix $$
 
 infix $$$ fun d1 $$$ d2 = d1 $$ text "" $$ d2;
+
+fun secr f y x = f (x, y);
 
 fun foldr1 f [x] = x
   | foldr1 f (x :: xs) = f (x, (foldr1 f xs));
@@ -187,9 +189,8 @@ val proper_funs = Set.foldr (fn (x, xs) => if is_const x andalso is_proper_fun x
 		  o all_atoms;
 
 val functions =
-    let val cmp = pair_compare (String.compare,String.compare) in
-	Set.foldr (fn (x, xs) => Set.add (xs, x |> dest_thy_const
-						|> (fn {Name=name, Thy=thy, ...} => (thy, name))))
+    let val cmp = pair_compare (String.compare,Term.compare) in
+	Set.foldr (fn (x, xs) => Set.add (xs, ((#Thy o dest_thy_const) x, x)))
 		  (Set.empty cmp)
 	o Set.foldr (fn (x, xs) => if (not o is_constructor) x
 				   then Set.add (xs, x)
@@ -203,17 +204,21 @@ val datatypes =
 		   (Set.empty Type.compare)
     o proper_funs;
 
-fun db_fetch (thy, name) = DB.fetch thy (name ^ !Defn.def_suffix);
+fun db_find_defn (thy, name) =
+    DB.match [thy] name
+	    |> filter (secr (op =) DB.Def o DBData.class)
+	    |> List.find (secr (op =) name o name_of_defn o DBData.theorem)
+	    |> valOf;
 
 fun prove (goal : term list * term) =
     let
 	val fs = (functions o snd) goal;
-	val fs' = Set.foldr (fn (x, xs) => Set.union (xs, (functions o concl o db_fetch) x)) fs fs;
+	val fs' = Set.foldr (fn (x, xs) => Set.union (xs, (functions o concl o DBData.theorem o db_find_defn) x)) fs fs;
 	val ts = (datatypes o snd) goal
     in
-	explore (Set.listItems ts)
-		(fs' |> Set.listItems
-		     |> map (fn (thy, name) => (thy, name ^ !Defn.def_suffix)))
+	explore_aux (Set.listItems ts)
+		    (fs' |> Set.listItems
+			 |> map (DBData.theorem o db_find_defn))
     end;
 
 fun try f arg =
