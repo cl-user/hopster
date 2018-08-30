@@ -33,20 +33,20 @@ fun pp_datatype (d : hol_type) =
 		      EmitHaskell.pp_type_decl d
     end;
 
-val get_defn_name =
+val name_of_defn =
     let
-	val equations = map (snd o strip_forall) o strip_conj o concl;
-	val lhs_ = lhs o hd;
-	val name = fst o dest_const o fst o strip_comb
+	val fst_defn = hd o strip_conj;
+	val eqn = snd o strip_forall;
+	val name = fst o strip_comb
     in
-	name o lhs_ o equations
+	name o lhs o eqn o fst_defn o concl
     end;
-
 
 fun pp_defns (defns : thm list) =
     let
 	val hs_variable = Dictionary.hs_variable;
-	val names = map ((fn mlname => (hs_variable mlname, mlname)) o get_defn_name) defns;
+	val const_to_string = fst o dest_const;
+	val names = map ((fn mlname => (hs_variable mlname, mlname)) o const_to_string o name_of_defn) defns;
     in
 	foldr1 (op $$) (map annotate_term names)
 	      $$$
@@ -215,19 +215,10 @@ fun prove (goal : term list * term) =
 fun try f arg =
     SOME (f arg) handle (HOL_ERR _) => NONE;
 
-val name_of =
-    let
-	val fst_defn = hd o strip_conj;
-	val eqn = snd o strip_forall;
-	val name = fst o strip_comb
-    in
-	name o lhs o eqn o fst_defn o concl
-    end;
-
 fun defnames (thy : string) =
     let
 	val defns = definitions thy;
-	val names = map (try (fn (dbname, defn) => (dbname, name_of defn))) defns
+	val names = map (try (fn (dbname, defn) => (dbname, name_of_defn defn))) defns
     in
 	(map valOf o filter isSome) names
     end;
