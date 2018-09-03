@@ -1,9 +1,9 @@
 structure Hopster =
 struct
 
-open HolKernel
+open HolKernel computeLib;
 
-open HughesPP DBData;
+open HughesPP;
 
 infix <+>
 infix $$
@@ -11,6 +11,10 @@ infix $$
 infix $$$ fun d1 $$$ d2 = d1 $$ text "" $$ d2;
 
 fun secr f y x = f (x, y);
+
+fun id x = x;
+
+fun string_to_term s = Term [QUOTE s];
 
 fun foldr1 f [x] = x
   | foldr1 f (x :: xs) = f (x, (foldr1 f xs));
@@ -204,21 +208,39 @@ val datatypes =
 		   (Set.empty Type.compare)
     o proper_funs;
 
-fun db_find_defn (thy, name) =
-    DB.match [thy] name
-	    |> filter (secr (op =) DB.Def o DBData.class)
-	    |> List.find (secr (op =) name o name_of_defn o DBData.theorem)
-	    |> valOf;
+structure ComputeData =
+struct
+
+val name = fst o fst;
+val theory = snd o fst;
+val transform = snd;
+
+end;
+
+fun find_defn (thy, name) =
+    let
+	val name' = (#Name o dest_thy_const) name
+	val is_thy = secr (op =) thy o ComputeData.theory;
+	val is_name = secr (op =) name' o ComputeData.name
+    in
+	computeLib.listItems computeLib.the_compset
+			     |> List.find (fn x => is_thy x andalso is_name x)
+			     |> valOf
+			     |> ComputeData.transform
+			     |> foldr (fn (clauses.RRules rules, xs) => rules :: xs) []
+			     |> List.concat
+			     |> foldr1 (uncurry CONJ)
+    end;
 
 fun prove (goal : term list * term) =
     let
 	val fs = (functions o snd) goal;
-	val fs' = Set.foldr (fn (x, xs) => Set.union (xs, (functions o concl o DBData.theorem o db_find_defn) x)) fs fs;
+	val fs' = Set.foldr (fn (x, xs) => Set.union (xs, (functions o concl o find_defn) x)) fs fs;
 	val ts = (datatypes o snd) goal
     in
 	explore_aux (Set.listItems ts)
 		    (fs' |> Set.listItems
-			 |> map (DBData.theorem o db_find_defn))
+			 |> map find_defn)
     end;
 
 fun try f arg =
@@ -226,21 +248,27 @@ fun try f arg =
 
 fun defnames (thy : string) =
     let
-	val defns = definitions thy;
-	val names = map (try (fn (dbname, defn) => (dbname, name_of_defn defn))) defns
+	val is_thy = secr (op =) thy o ComputeData.theory;
+	val to_thm = foldr1 (uncurry CONJ)
+		     o List.concat
+		     o foldr (fn (clauses.RRules rules, xs) => rules :: xs) []
+		     o ComputeData.transform
     in
-	(map valOf o filter isSome) names
+	computeLib.listItems computeLib.the_compset
+			     |> filter is_thy
+			     |> filter (not o null o ComputeData.transform)
+			     |> map (fn x => (ComputeData.name x, to_thm x))
     end;
 
 val TOP_FUNS_SIZE = 3;
 
 fun top_thy_funs (thy : string) =
     let
-	(* val thy = (#Thy o dest_thy_type) t; *)
-	val (dbnames, names) = (unzip o defnames) thy;
+	val funs = defnames thy;
+	val names = map (string_to_term o fst) funs;
 	val matches = map (length o DB.match [thy]) names;
 	val cmp = curry (op> o (snd ## snd));
-	val top = sort cmp (zip dbnames matches)
+	val top = sort cmp (zip funs matches)
     in
 	map fst (List.take (top, TOP_FUNS_SIZE))
     end
