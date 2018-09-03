@@ -174,9 +174,12 @@ structure Set = HOLset;
 fun is_constructor f =
     let
 	fun constructors_of t = TypeBase.constructors_of t handle (HOL_ERR _) => [];
+	val name_of = #Name o dest_thy_const;
+	val theory_of = #Thy o dest_thy_const;
 	val cs = (constructors_of o snd o strip_fun o type_of) f
     in
-	exists (fn g => f = g) cs
+	exists (fn g => name_of f = name_of g andalso
+			theory_of f = theory_of g) cs
     end;
 
 fun is_proper_fun t =
