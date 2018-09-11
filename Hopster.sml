@@ -5,6 +5,8 @@ open HolKernel computeLib;
 
 open HughesPP;
 
+val ERR = mk_HOL_ERR "Hopster";
+
 infix <+>
 infix $$
 

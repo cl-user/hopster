@@ -15,6 +15,8 @@ infix $$;
 infix cat;
 infix <+>;
 
+val ERR = mk_HOL_ERR "EmitHaskell";
+
 fun foldr1 f [x] = x
   | foldr1 f (x :: xs) = f (x, (foldr1 f xs));
 
