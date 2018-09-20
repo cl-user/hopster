@@ -117,12 +117,8 @@ fun prove_conjectures_aux (tactic, [], thms, [], _, _) = ([], thms)
     end
   | prove_conjectures_aux (tactic, g::gs, thms, acc, defns, status) =
     case tactic (defns @ thms) g of
-	([], f) => let val _ = print "Conjecture proven...\n" in
-		       prove_conjectures_aux (tactic, gs, f [] :: thms, acc, defns, true)
-		   end
-      | _ => let val _ = print "Conjecture not proven...\n" in
-		 prove_conjectures_aux (tactic, gs, thms, g :: acc, defns, status)
-	     end;
+	([], f) => prove_conjectures_aux (tactic, gs, f [] :: thms, acc, defns, true)
+      | _ => prove_conjectures_aux (tactic, gs, thms, g :: acc, defns, status);
 
 fun prove_conjectures (goals, defns) =
     let
@@ -261,9 +257,10 @@ fun prove (goal : term list * term) =
 	val fs' = Set.foldr (fn (x, xs) => Set.union (xs, (functions o concl o find_defn) x)) fs fs;
 	val ts = (datatypes o snd) goal
     in
-	explore_aux (Set.listItems ts)
-		    (fs' |> Set.listItems
-			 |> map find_defn)
+	(Set.listItems ts, Set.listItems fs')
+	(* explore_aux (Set.listItems ts) *)
+	(* 	    (fs' |> Set.listItems *)
+	(* 		 |> map find_defn) *)
     end;
 
 fun try f arg =
