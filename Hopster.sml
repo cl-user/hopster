@@ -206,9 +206,27 @@ val functions =
 	o proper_funs
     end;
 
+
+fun destroy_type (t : hol_type) =
+    if is_vartype t
+    then []
+    else let val (name, args) = dest_type t in
+	     EmitHaskell.create_type (name, length args) :: List.concat (map destroy_type args)
+	 end;
+
+fun all_ground_types (t : hol_type) =
+    let val (args, ret) = strip_fun t in
+	ret ::
+	(if null args
+	 then []
+	 else List.concat (map all_ground_types args))
+    end;
+
 val datatypes =
-    Set.foldr (fn (x, xs) => Set.add (xs, (snd o strip_fun o type_of) x))
-		   (Set.empty Type.compare)
+    Set.foldr (fn (x, xs) => Set.addList(xs, destroy_type x))
+	      (Set.empty Type.compare)
+    o Set.foldr (fn (x, xs) => Set.addList (xs, (all_ground_types o type_of) x))
+	      (Set.empty Type.compare)
     o proper_funs;
 
 structure ComputeData =
