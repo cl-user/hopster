@@ -33,6 +33,7 @@ end;
 signature PARSER = sig
     include MONAD;
     val parse : 'a t -> string -> ('a * string) list;
+    val void : unit t;
     val item : char t;
     val sat : (char -> bool) -> char t;
     val digit : char t;
@@ -41,6 +42,7 @@ signature PARSER = sig
     val letter : char t;
     val alphanum : char t;
     val char : char -> char t;
+    val null : char t;
     val string : string -> string t;
     val ident : string t;
     val nat : int t;
@@ -61,6 +63,10 @@ type 'a t = char list -> ('a * char list) list;
 fun parse p s = case (p o explode) s of
 		    nil => nil
 		  | [(v, out)] => [(v, implode out)];
+
+val void =
+ fn nil => [((), nil)]
+  | _ => nil;
 
 val item =
  fn nil => nil
@@ -102,6 +108,8 @@ val letter = sat Char.isAlpha;
 val alphanum = sat Char.isAlphaNum;
 
 fun char c = sat (fn x => x = c);
+
+val null = void >>= (fn _ => return Char.minChar);
 
 fun string "" = return ""
   | string cs =

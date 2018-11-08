@@ -86,7 +86,7 @@ local
     open Parser;
     infix >> fun ma >> mb = ma >>= (fn _ => mb)
 in
-fun conjecture () = (char #"\n" >> char #"\n" >> return nil) <|>
+fun conjecture () = (char #"\n" >> (char #"\n" <|> null) >> return nil) <|>
 	            (item >>= (fn x => conjecture () >>= (fn xs => return (x :: xs))));
 
 val conjectures = many (token (conjecture ()))
