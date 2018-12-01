@@ -120,7 +120,17 @@ fun prove_conjectures_aux (tactic, [], thms, [], _, _) = ([], thms)
 	([], f) => prove_conjectures_aux (tactic, gs, f [] :: thms, acc, defns, true)
       | _ => prove_conjectures_aux (tactic, gs, thms, g :: acc, defns, status);
 
-fun prove_conjectures (goals, defns) =
+fun print_results (conjs, lemmas) =
+    let
+	val _ = print "** Conjectures found **\n";
+	val _ = map (print o (fn x => x ^ "\n") o term_to_string o snd) conjs;
+	val _ = print "** Lemmas found **\n";
+	val _ = map (print o (fn x => x ^ "\n") o thm_to_string) lemmas
+    in
+	()
+    end;
+
+fun prove_conjectures defns conjs =
     let
 	val args = (EASY_TAC, goals, [], [], defns, false);
 	val (gs, ls) = prove_conjectures_aux args;
@@ -144,7 +154,7 @@ fun explore_aux (datatypes : hol_type list)
 	      val f = TextIO.openIn "tip-out.txt";
 	      val conjs = parse_conjectures (TextIO.inputAll f);
 	      val _ = TextIO.closeIn f;
-	      val (conjs', lemmas) = prove_conjectures (conjs, defns)
+	      val (conjs', lemmas) = prove_conjectures defns conjs
 	  in
 	      (conjs', lemmas)
 	  end
