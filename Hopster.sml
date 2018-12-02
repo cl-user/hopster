@@ -183,8 +183,8 @@ fun prove_conjectures defns conjs =
 	(* (gs, ls) *)
     end;
 
-fun explore_aux (datatypes : hol_type list)
-		(defns : thm list) =
+fun quickspec (datatypes : hol_type list)
+	      (defns : thm list) =
     let
       open OS.Process
       val name = "Explore"
@@ -198,9 +198,8 @@ fun explore_aux (datatypes : hol_type list)
 	      val f = TextIO.openIn "tip-out.txt";
 	      val conjs = parse_conjectures (TextIO.inputAll f);
 	      val _ = TextIO.closeIn f;
-	      val (conjs', lemmas) = prove_conjectures defns conjs
 	  in
-	      (conjs', lemmas)
+	      conjs
 	  end
       else raise ERR "explore" "Error while invoking tip tools"
     end;
@@ -213,9 +212,10 @@ fun explore_aux (datatypes : hol_type list)
 (*                                                                            *)
 (* EXAMPLE: Hopster.explore [] [("list","REVERSE_DEF"), ("list","APPEND")]    *)
 fun explore (datatypes : hol_type list)
-	    (defns : (string * string) list) =
-    explore_aux datatypes
-		(map (uncurry DB.fetch) defns);
+	    (funnames : (string * string) list) =
+    let val funs = map (uncurry DB.fetch) funnames in
+	quickspec datatypes funs |> prove_conjectures funs
+    end;
 
 (**************)
 (* Proof mode *)
