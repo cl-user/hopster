@@ -120,6 +120,38 @@ fun prove_conjectures_aux (tactic, [], thms, [], _, _) = ([], thms)
 	([], f) => prove_conjectures_aux (tactic, gs, f [] :: thms, acc, defns, true)
       | _ => prove_conjectures_aux (tactic, gs, thms, g :: acc, defns, status);
 
+fun combinations_aux ([] : 'a list)
+		     (ys : 'a list) = []
+  | combinations_aux (x::xs) ys = (x, ys @ xs) :: combinations_aux xs (ys @ [x]);
+
+fun combinations (xs : 'a list) : ('a * 'a list) list =
+    combinations_aux xs [];
+
+fun is_unprovable (tactic, goal) =
+    case tactic goal of
+	([], _) => false
+      | _ => true;
+
+fun impossible_conjectures_aux ([], (us, ps)) = (us, rev ps)
+  | impossible_conjectures_aux (x::xs, (us,ps)) =
+    let
+	val (conj, lemmas) = x;
+	val tac = TRY (FIRST_PROVE [EASY_TAC lemmas, HARD_TAC lemmas])
+    in
+	if is_unprovable (tac, conj)
+	then impossible_conjectures_aux(xs, (conj :: us, ps))
+	else impossible_conjectures_aux(xs, (us, conj :: ps))
+    end;
+
+fun impossible_conjectures (goals : (term list * term) list,
+			    defns : thm list) =
+    let
+	val xs = map (fn (g, cs) => (g, defns @ (map mk_thm cs)))
+		     (combinations goals)
+    in
+	impossible_conjectures_aux (xs, ([],[]))
+    end;
+
 fun print_results (conjs, lemmas) =
     let
 	val _ = print "** Conjectures found **\n";
@@ -132,11 +164,23 @@ fun print_results (conjs, lemmas) =
 
 fun prove_conjectures defns conjs =
     let
-	val args = (EASY_TAC, goals, [], [], defns, false);
+	val t = Timer.startRealTimer ();
+	val args = (EASY_TAC, conjs, [], [], defns, false);
 	val (gs, ls) = prove_conjectures_aux args;
-	val args' = (HARD_TAC, gs, [], [], defns @ ls, false)
+	val t1 = Time.toString (Timer.checkRealTimer t);
+	val (us, ps) = impossible_conjectures (gs, defns @ ls);
+	val _ = print ("Number of unprovables is: " ^ Int.toString(length us) ^ "\n");
+	val t2 = Time.toString (Timer.checkRealTimer t);
+	val args' = (HARD_TAC, ps, [], [], defns @ ls, false);
+	val (us', ps') = prove_conjectures_aux args';
+	val t3 = Time.toString (Timer.checkRealTimer t);
+	val _ = print ("Time to find easy lemmas: " ^ t1 ^ "\n"
+		       ^ "Time to find impossible lemmas: " ^ t2 ^ "\n"
+		       ^ "Time to finish proof loop: " ^ t3 ^ "\n")
     in
-	prove_conjectures_aux args'
+	(us @ us', ps')
+	(* (us', ps') *)
+	(* (gs, ls) *)
     end;
 
 fun explore_aux (datatypes : hol_type list)
