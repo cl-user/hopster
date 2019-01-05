@@ -18,6 +18,8 @@ fun id x = x;
 
 fun string_to_term s = Term [QUOTE s];
 
+fun term_to_quote t = [QUOTE (term_to_string t)];
+
 fun foldr1 f [x] = x
   | foldr1 f (x :: xs) = f (x, (foldr1 f xs));
 
@@ -105,7 +107,16 @@ fun parse_conjectures cs =
 val _ = metisTools.limit := {time = SOME 1.0, infs = NONE};
 
 (* Tactic to prove a single goal *)
-fun HARD_TAC lemmas = TRY (TRY (Induct) \\ metis_tac lemmas);
+fun HARD_TAC lemmas goal =
+    let
+        val vars = (fst o strip_forall o snd) goal;
+        val induct_tacs = map (fn var => Induct_on (term_to_quote var)
+                                                   \\ metis_tac lemmas)
+                              vars;
+        val tacs = induct_tacs @ [metis_tac lemmas]
+    in
+        TRY (FIRST_PROVE tacs) goal
+    end;
 
 fun EASY_TAC lemmas = fs (map (fn x => Ntimes x 10) lemmas);
 
