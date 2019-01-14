@@ -316,16 +316,15 @@ fun find_defn (thy, name) =
 			     |> foldr1 (uncurry CONJ)
     end;
 
-fun prove (goal : term list * term) =
+fun hopster_tac (goal : term list * term) =
     let
 	val fs = (functions o snd) goal;
 	val fs' = Set.foldr (fn (x, xs) => Set.union (xs, (functions o concl o find_defn) x)) fs fs;
-	val ts = (datatypes o snd) goal
+        val funs = map find_defn (Set.listItems fs');
+	val types = (Set.listItems o datatypes o snd) goal;
+        val (_, lemmas) = prove_conjectures funs (quickspec types funs)
     in
-	(Set.listItems ts, Set.listItems fs')
-	(* explore_aux (Set.listItems ts) *)
-	(* 	    (fs' |> Set.listItems *)
-	(* 		 |> map find_defn) *)
+        FIRST_PROVE [EASY_TAC lemmas, HARD_TAC lemmas] goal
     end;
 
 fun try f arg =
