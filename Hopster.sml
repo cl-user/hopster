@@ -349,7 +349,7 @@ val TOP_FUNS_SIZE = 3;
 fun top_thy_funs (thy : string) =
     let
 	val funs = defnames thy;
-	val names = map (string_to_term o fst) funs;
+	val names = map (string_to_term o secl (op ^) "$" o fst) funs;
 	val matches = map (length o DB.match [thy]) names;
 	val cmp = curry (op> o (snd ## snd));
 	val top = sort cmp (zip funs matches)
