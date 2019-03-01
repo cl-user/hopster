@@ -336,11 +336,14 @@ fun defnames (thy : string) =
 	val to_thm = foldr1 (uncurry CONJ)
 		     o List.concat
 		     o foldr (fn (clauses.RRules rules, xs) => rules :: xs) []
-		     o ComputeData.transform
+		     o ComputeData.transform;
+        fun has_rules (clauses.RRules _) = true
+          | has_rules _ = false
     in
 	computeLib.listItems computeLib.the_compset
 			     |> filter is_thy
 			     |> filter (not o null o ComputeData.transform)
+                             |> filter (List.all has_rules o ComputeData.transform)
 			     |> map (fn x => (ComputeData.name x, to_thm x))
     end;
 
