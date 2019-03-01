@@ -175,23 +175,17 @@ fun print_results (conjs, lemmas) =
 
 fun prove_conjectures defns conjs =
     let
-	val t = Timer.startRealTimer ();
-	val args = (EASY_TAC, conjs, [], [], defns, false);
+        val t = Timer.startRealTimer ();
+        val args = (EASY_TAC, conjs, [], [], defns, false);
 	val (gs, ls) = prove_conjectures_aux args;
-	val t1 = Time.toString (Timer.checkRealTimer t);
-	val (us, ps) = impossible_conjectures (gs, defns @ ls);
-	val _ = print ("Number of unprovables is: " ^ Int.toString(length us) ^ "\n");
+        val t1 = Time.toString (Timer.checkRealTimer t);
+	val args' = (HARD_TAC, gs, [], [], defns @ ls, false);
+	val (gs', ls') = prove_conjectures_aux args';
 	val t2 = Time.toString (Timer.checkRealTimer t);
-	val args' = (HARD_TAC, ps, [], [], defns @ ls, false);
-	val (us', ps') = prove_conjectures_aux args';
-	val t3 = Time.toString (Timer.checkRealTimer t);
-	val _ = print ("Time to find easy lemmas: " ^ t1 ^ "\n"
-		       ^ "Time to find impossible lemmas: " ^ t2 ^ "\n"
-		       ^ "Time to finish proof loop: " ^ t3 ^ "\n")
+        val _ = print ("Time to find easy lemmas: " ^ t1 ^ "\n"
+		       ^ "Time to finish proof loop: " ^ t2 ^ "\n")
     in
-	(us @ us', ps')
-	(* (us', ps') *)
-	(* (gs, ls) *)
+	(gs', ls @ ls')
     end;
 
 fun quickspec (datatypes : hol_type list)
