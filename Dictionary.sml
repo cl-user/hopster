@@ -57,38 +57,43 @@ fun head s = String.sub (s, 0)
 fun tail s = String.extract (s, 1, NONE)
 fun cons c s = String.str c ^ s
 
+val symbolicChars =
+    Redblackmap.fromList Char.compare
+			 [ (#"#", "NumberSign")
+			 , (#"?", "QuestionMark")
+			 , (#"+", "PlusSign")
+			 , (#"*", "Asterisk")
+			 , (#"/", "Solidus")
+			 , (#"\\", "ReverseSolidus")
+			 , (#"=", "EqualsSign")
+			 , (#"<", "LessThanSign")
+			 , (#">", "GreaterThanSign")
+			 , (#"&", "Ampersand")
+			 , (#"%", "PercentSign")
+			 , (#"@", "CommercialAt")
+			 , (#"!", "ExclamationMark")
+			 , (#":", "Colon")
+			 , (#"|", "VerticalLine")
+			 , (#"-", "HyphenMinus")
+			 , (#"^", "CircumflexAccent")
+			 , (#"'", "Apostrophe")
+			 , (#"0", "Zero")
+			 , (#"1", "One")
+			 , (#"2", "Two")
+			 , (#"3", "Three")
+			 , (#"4", "Four")
+			 , (#"5", "Five")
+			 , (#"6", "Six")
+			 , (#"7", "Seven")
+			 , (#"8", "Eight")
+			 , (#"9", "Nine") ];
+
 fun hs_constructor (name : string) =
   let
-      val symbolicChars =
-	  Redblackmap.fromList Char.compare
-			       [ (#"#", "NumberSign")
-			       , (#"?", "QuestionMark")
-			       , (#"+", "PlusSign")
-			       , (#"*", "Asterisk")
-			       , (#"/", "Solidus")
-			       , (#"\\", "ReverseSolidus")
-			       , (#"=", "EqualsSign")
-			       , (#"<", "LessThanSign")
-			       , (#">", "GreaterThanSign")
-			       , (#"&", "Ampersand")
-			       , (#"%", "PercentSign")
-			       , (#"@", "CommercialAt")
-			       , (#"!", "ExclamationMark")
-			       , (#":", "Colon")
-			       , (#"|", "VerticalLine")
-			       , (#"-", "HyphenMinus")
-			       , (#"^", "CircumflexAccent")
-			       , (#"'", "Apostrophe")
-			       , (#"0", "Zero")
-			       , (#"1", "One")
-			       , (#"2", "Two")
-			       , (#"3", "Three")
-			       , (#"4", "Four")
-			       , (#"5", "Five")
-			       , (#"6", "Six")
-			       , (#"7", "Seven")
-			       , (#"8", "Eight")
-			       , (#"9", "Nine") ]
+      val builtins =
+          Redblackmap.fromList String.compare
+                               [ ("T", "True"),
+                                 ("F", "False")];
       fun alphanum_ident () =
 	    cons (Char.toUpper (head name))
 		 (tail name)
@@ -99,10 +104,14 @@ fun hs_constructor (name : string) =
 	in
 	    String.concat symNames
 	end
+      fun is_builtin () =
+          Option.isSome (SOME (Redblackmap.findKey (builtins, name)) handle NotFound => NONE);
   in
-      if Char.isAlpha (head name)
-      then alphanum_ident ()
-      else symbolic_ident ()
+      if is_builtin ()
+      then Redblackmap.find (builtins, name)
+      else (if Char.isAlpha (head name)
+            then alphanum_ident ()
+            else symbolic_ident ())
   end;
 
 local
