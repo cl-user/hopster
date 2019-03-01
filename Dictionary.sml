@@ -141,9 +141,19 @@ val hs_variable =
 	    concat o map (implode o capitalize o explode) o String.tokens is_sep
 	end
       fun fix_first_char s =
-	cons (Char.toLower (head s)) (tail s)
+	  cons (Char.toLower (head s)) (tail s);
+      val fix_sym_chars =
+          let
+              fun fix sym =
+                  if Char.isDigit sym
+                  then str sym
+                  else (Redblackmap.find (symbolicChars, sym)
+                        handle NotFound => str sym)
+          in
+              concat o map fix o explode
+          end
   in
-      fix_first_char o fix_camel_case o fix_reserved
+      fix_first_char o fix_camel_case o fix_reserved o fix_sym_chars
   end;
 
 fun types' (t : hol_type, d : dict) =
