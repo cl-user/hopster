@@ -13,6 +13,7 @@ infix $$
 infix $$$ fun d1 $$$ d2 = d1 $$ text "" $$ d2;
 
 fun secr f y x = f (x, y);
+fun secl f x y = f (x, y);
 
 fun id x = x;
 
