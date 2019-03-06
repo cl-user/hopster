@@ -107,6 +107,13 @@ fun parse_conjectures cs =
 
 val _ = metisTools.limit := {time = SOME 1.0, infs = NONE};
 
+fun interleave x [] = [[x]]
+  | interleave x (y::ys) =  (x :: y :: ys) :: map (secl (op ::) y)
+                                                  (interleave x ys);
+
+fun permute [] = [[]]
+  | permute (x::xs) = List.concat (map (interleave x) (permute xs));
+
 (* Tactic to prove a single goal *)
 fun HARD_TAC lemmas goal =
     let
@@ -114,7 +121,8 @@ fun HARD_TAC lemmas goal =
         val induct_tacs = map (fn var => Induct_on (term_to_quote var)
                                                    \\ metis_tac lemmas)
                               vars;
-        val tacs = induct_tacs @ [metis_tac lemmas]
+        val perms = permute induct_tacs;
+        val tacs = map (foldr (op >>) (metis_tac lemmas)) perms
     in
         TRY (FIRST_PROVE tacs) goal
     end;
