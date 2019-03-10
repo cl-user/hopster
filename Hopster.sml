@@ -118,13 +118,13 @@ fun permute [] = [[]]
 fun HARD_TAC lemmas goal =
     let
         val vars = (fst o strip_forall o snd) goal;
-        val induct_tacs = map (fn var => Induct_on (term_to_quote var)
-                                                   \\ metis_tac lemmas)
+        val fo_tac = TRY (metis_tac lemmas);
+        val induct_tacs = map (fn var => Induct_on (term_to_quote var) >> fo_tac)
                               vars;
         val perms = permute induct_tacs;
-        val tacs = map (foldr (op >>) (metis_tac lemmas)) perms
+        val tacs = map (foldr (op >>) ALL_TAC) perms
     in
-        TRY (FIRST_PROVE tacs) goal
+        TRY (FIRST_PROVE (tacs @ [fo_tac])) goal
     end;
 
 fun EASY_TAC lemmas = fs (map (fn x => Ntimes x 10) lemmas);
